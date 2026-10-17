@@ -301,6 +301,12 @@ python3 -m unittest discover -s tests -v
     （会丢手顺/劫，属于回退方案）。新增 20 个测试（`test_ai` 11、`test_web_ai` 9），
     全部用 fake GTP 脚本，CI 不需要安装 KataGo；总计 122 个测试。
     README 增加安装/配置/强度/体积/许可证说明，`ai.json` 与 `models/` 忽略。
+20. **KataGo 真机验证（用户要求）**：`brew install katago` 安装 1.18.2_2
+    （Metal 后端，368.8 MB，含 b18/b20/b40 三个网络）；自动发现
+    `/opt/homebrew/bin/katago`、b18 模型与 `gtp_example.cfg`。19 路空盘 300 visits
+    首手为 Q16，单步约 2–3 秒；CLI `--ai` 实测正常。随后与 KataGo 下了一局 19 路
+    （我执黑、简单人类策略，白方 300 visits），第 60 手黑棋认输，结果 W+R；棋谱保存在
+    `records/19x19-vs-katago.sgf`（`records/` 已忽略，不进入仓库）。
 
 ## 计分规则（用户提问澄清）
 

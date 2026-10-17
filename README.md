@@ -157,6 +157,9 @@ Linux / Windows 可从 [KataGo Releases](https://github.com/lightvector/KataGo/r
 下载对应后端的可执行文件，再从 [katagotraining.org](https://katagotraining.org/networks/)
 下载一个 `.bin.gz` 网络。macOS Apple Silicon 的 Homebrew 版本使用 Metal 后端。
 
+已在 macOS Apple Silicon + Homebrew KataGo 1.18.2（Metal）上实测：19 路、300 visits
+时单步约 2–3 秒。
+
 ### 配置
 
 不写配置也能自动发现：先找 `PATH` 里的 `katago`，再找 Homebrew 的
