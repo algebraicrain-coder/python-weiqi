@@ -284,6 +284,12 @@ python3 -m unittest discover -s tests -v
     `parse_vertex`/CLI 约定 `y=0` 是第 1 行（底部），导致同一坐标在网页与命令行
     位置相反、坐标标签也会错。新增 `toScreen()` 统一 `sy = size-1-y`，点击反算
     `y = size-1-sy`；用 Node 驱动真实页面验证：点左下角发送 `A1`、点右上角发送 `J9`。
+18. **README 截图改用公有领域棋谱（用户反馈）**：原先截图用的是临时自拟布局，观感
+    不像真实对局，也无法说明来源。现改用 1846 年「耳赤之局」（本因坊秀策 vs 井上
+    幻庵因硕）前 25 手的大斜定式；历史棋谱属公有领域。截图同时写入黑/白方、赛事、
+    日期与贴目 0；开局存为 `docs/ear-reddening-opening.sgf` 便于复现，README 注明
+    Wikipedia 来源。GitHub 对同 URL 图片有缓存，故把截图改名为
+    `docs/screenshot-ear-reddening.png` 以强制使用新的图片 URL。
 
 ## 计分规则（用户提问澄清）
 

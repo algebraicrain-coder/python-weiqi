@@ -6,7 +6,11 @@
 可把对局保存为标准 SGF 或文本棋谱，并加载已有 SGF 逐步回放。全部使用 Python 标准库，
 无需安装任何第三方依赖。
 
-![界面截图](docs/screenshot.png)
+![界面截图](docs/screenshot-ear-reddening.png)
+
+> 截图开局：1846 年「耳赤之局」本因坊秀策（黑）对 井上幻庵因硕（白）前 25 手（大斜定式）。
+> 历史棋谱属公有领域，见 [`docs/ear-reddening-opening.sgf`](docs/ear-reddening-opening.sgf)；
+> 来源：[Wikipedia: Ear-reddening game](https://en.wikipedia.org/wiki/Ear-reddening_game)。
 
 ## 环境要求
 
@@ -25,7 +29,8 @@ python-weiqi/
 ├── LICENSE                MIT 许可证
 ├── .gitignore
 ├── docs/
-│   └── screenshot.png     界面截图
+│   ├── screenshot-ear-reddening.png  界面截图
+│   └── ear-reddening-opening.sgf     截图所用开局（公有领域）
 ├── records/               默认棋谱目录（运行时生成，不纳入版本库）
 ├── goban/                 核心包
 │   ├── __init__.py        对外导出
