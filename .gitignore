@@ -1,0 +1,20 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 工具缓存
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 系统文件
+.DS_Store
+
+# 虚拟环境 / 构建
+.venv*/
+build/
+
+# 玩家存档（程序会自动创建目录）
+records/*
+!records/.gitkeep
