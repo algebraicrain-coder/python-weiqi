@@ -6,6 +6,14 @@ import time
 from pathlib import Path
 
 from . import help as helpmod
+from .ai import (
+    EngineError,
+    EnginePlayer,
+    KataGoGTP,
+    add_cli_arguments,
+    discover_config,
+    overrides_from_args,
+)
 from .board import (
     BLACK,
     COLUMNS,
@@ -331,7 +339,15 @@ def mark_dead_phase(game: Game, metadata=None, reader=input, writer=print) -> st
         writer(f"toggled {count} stone(s)")
 
 
-def play_game(game: Game, metadata=None, record_dir=None, reader=input, writer=print) -> None:
+def play_game(
+    game: Game,
+    metadata=None,
+    record_dir=None,
+    reader=input,
+    writer=print,
+    engine=None,
+    ai_color=None,
+) -> None:
     metadata = metadata or {}
     record_dir = Path(record_dir) if record_dir is not None else default_record_dir()
     move_source = make_move_source(reader)
@@ -339,13 +355,21 @@ def play_game(game: Game, metadata=None, record_dir=None, reader=input, writer=p
         BLACK: HumanPlayer("Black", move_source),
         WHITE: HumanPlayer("White", move_source),
     }
+    if engine is not None and ai_color in (BLACK, WHITE):
+        players[ai_color] = EnginePlayer("KataGo", engine)
 
     while True:
         while not game.over:
             writer(render(game))
             color = game.board.to_play
+            if isinstance(players[color], EnginePlayer):
+                writer(f"{players[color].name} 思考中…")
             try:
                 move = players[color].choose_move(game)
+            except EngineError as error:
+                writer(f"AI 错误：{error}")
+                players[color] = HumanPlayer(color_name(color), move_source)
+                continue
             except Command as command:
                 if command.command == "quit":
                     offer_save(game, metadata, record_dir, reader, writer)
@@ -499,6 +523,14 @@ def play_main(argv) -> int:
     parser.add_argument("--event", help="event name")
     parser.add_argument("--rules", help="ruleset name")
     parser.add_argument("--date", help="date (YYYY-MM-DD)")
+    parser.add_argument("--ai", action="store_true", help="让本机 KataGo 执一方")
+    parser.add_argument(
+        "--ai-color",
+        choices=("black", "white"),
+        default="white",
+        help="AI 执黑或执白（默认 white）",
+    )
+    add_cli_arguments(parser)
     args = parser.parse_args(argv)
 
     metadata = {}
@@ -524,11 +556,47 @@ def play_main(argv) -> int:
     else:
         game = Game(size=args.size, komi=args.komi, ko_rule=args.ko)
 
+    engine = None
+    ai_color = None
+    if args.ai:
+        try:
+            ai_config = discover_config(
+                overrides_from_args(args),
+                config_path=args.ai_config,
+            )
+        except ValueError as error:
+            print(f"error: {error}")
+            return 1
+        if ai_config is None:
+            print(
+                "error: 未找到 KataGo；macOS 可运行 brew install katago，"
+                "或用 --ai-bin / --ai-model 指定。"
+            )
+            return 1
+        if not ai_config.available():
+            print(f"error: {ai_config.missing_reason()}")
+            return 1
+        engine = KataGoGTP(ai_config)
+        ai_color = BLACK if args.ai_color == "black" else WHITE
+        print(
+            f"AI: {ai_config.binary_path()}  "
+            f"model={Path(ai_config.model).name}  visits={ai_config.max_visits}"
+        )
+
     try:
-        play_game(game, metadata, record_dir=args.record_dir)
+        play_game(
+            game,
+            metadata,
+            record_dir=args.record_dir,
+            engine=engine,
+            ai_color=ai_color,
+        )
     except KeyboardInterrupt:
         print("\ninterrupted")
         return 130
+    finally:
+        if engine is not None:
+            engine.close()
     return 0
 
 

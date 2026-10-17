@@ -382,6 +382,34 @@ ENTRIES: list[Entry] = [
         see_also=("ko-rules",),
     ),
     Entry(
+        "--ai",
+        "命令行：让本机 KataGo 执一方",
+        "cli",
+        detail=(
+            "需要本机安装 KataGo（macOS 可用 brew install katago）和一个 .bin.gz 模型。"
+            "默认 AI 执白；用 --ai-color 切换，--ai-visits / --ai-time 控制强度。"
+            "找不到引擎或模型时会给出明确提示，不会影响普通双人对弈。"
+        ),
+        examples=(
+            "python3 main.py --ai",
+            "python3 main.py --ai --ai-color black --ai-visits 200",
+        ),
+        see_also=("--ai-color", "--ai-visits"),
+    ),
+    Entry(
+        "--ai-color black|white",
+        "命令行：AI 执黑或执白",
+        "cli",
+        examples=("python3 main.py --ai --ai-color black",),
+    ),
+    Entry(
+        "--ai-visits N",
+        "命令行：限制 AI 每手访问数",
+        "cli",
+        detail="访问数越低越弱、越快；不指定时使用 ai.json 或默认值 300。",
+        examples=("python3 main.py --ai --ai-visits 100",),
+    ),
+    Entry(
         "--load FILE",
         "命令行：启动即载入 SGF",
         "cli",
@@ -415,7 +443,8 @@ ENTRIES: list[Entry] = [
         detail=(
             "启动本地 HTTP 服务器并在浏览器打开棋盘界面（纯标准库，无第三方依赖）。"
             "点击落子，按钮停一手/悔棋/认输/标记死子/完成数子/新局/存取棋谱/改元信息。"
-            "选项：--host/--port/--record-dir/--no-open。"
+            "检测到 KataGo 时会出现「AI 落子」按钮；选项：--host/--port/--record-dir/"
+            "--no-open/--no-ai 及 --ai-* 参数。"
         ),
         examples=("python3 main.py web", "python3 main.py web --port 9000 --no-open"),
     ),
@@ -458,6 +487,20 @@ ENTRIES: list[Entry] = [
             "用 --ko 或设置模式 ko <规则> 切换。"
         ),
         see_also=("--ko RULE", "ko"),
+    ),
+    Entry(
+        "ai",
+        "AI 引擎：可选接入本机 KataGo",
+        "topic",
+        aliases=("katago",),
+        detail=(
+            "AI 是可选外部引擎，不影响核心零依赖。macOS 可 brew install katago；"
+            "Linux/Windows 下载官方可执行文件与 .bin.gz 模型。命令行用 --ai，"
+            "网页检测到引擎后出现「AI 落子」按钮。默认 AI 执白，可用 --ai-color 切换；"
+            "--ai-visits / --ai-time 控制强度。路径可用 ai.json 或 --ai-bin/--ai-model 固定。"
+        ),
+        examples=("python3 main.py --ai", "python3 main.py --ai --ai-visits 100"),
+        see_also=("--ai", "--ai-color black|white", "--ai-visits N"),
     ),
     Entry(
         "scoring",

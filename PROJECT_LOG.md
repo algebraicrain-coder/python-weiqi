@@ -290,6 +290,17 @@ python3 -m unittest discover -s tests -v
     日期与贴目 0；开局存为 `docs/ear-reddening-opening.sgf` 便于复现，README 注明
     Wikipedia 来源。GitHub 对同 URL 图片有缓存，故把截图改名为
     `docs/screenshot-ear-reddening.png` 以强制使用新的图片 URL。
+19. **接入可选 KataGo AI（用户需求）**：核心保持零依赖，新增 `goban/ai/`：
+    `AIConfig` 按 CLI > 环境变量 > `ai.json` > PATH/Homebrew 的顺序发现；
+    `KataGoGTP` 用子进程说 GTP，处理空行响应、stderr 排空、超时杀进程，
+    每手用 `clear_board` + 重放着法同步局面；`Position` 快照让网页可在锁外调用引擎，
+    回来再校验局面是否被改动。CLI 增加 `--ai/--ai-color/--ai-visits` 等，
+    网页增加 `/api/ai` 与「AI 落子」按钮；找不到引擎/模型时降级提示。
+    规则映射：`chinese`→`chinese-ogs`、`simple`→`chinese`、`situational`→`aga`、
+    `japanese`→`japanese`。带 SGF 摆子（AB/AW）时改用 `set_position` 还原盘面
+    （会丢手顺/劫，属于回退方案）。新增 20 个测试（`test_ai` 11、`test_web_ai` 9），
+    全部用 fake GTP 脚本，CI 不需要安装 KataGo；总计 122 个测试。
+    README 增加安装/配置/强度/体积/许可证说明，`ai.json` 与 `models/` 忽略。
 
 ## 计分规则（用户提问澄清）
 
@@ -310,5 +321,6 @@ python3 -m unittest discover -s tests -v
 - 图形界面入口：`python3 main.py web [--port N --no-open]`。
 - 棋谱默认目录：`weiqi/records/`，可用 `--record-dir` 更改。
 - 依赖：仅标准库，无需 venv、无需安装。
-- 下一步：实现 `AIPlayer`（随机 → 蒙特卡洛 → MCTS），并接入 `cli.py`；棋谱侧再做
-  变化图、注释/标记与棋谱库检索。
+- 已完成：KataGo GTP 可选 AI（见第 19 条）；棋谱侧仍可做变化图、注释/标记与棋谱库检索。
+- 下一步：接 KataGo **analysis engine**（胜率/目差/PV/ownership 热图）、
+  human SL 强度档位与首次运行下载脚本；核心 MCTS 仍可作为无外部依赖的轻量后备。

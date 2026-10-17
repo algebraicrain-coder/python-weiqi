@@ -8,8 +8,19 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .board import BLACK, KO_RULES, WHITE, IllegalMove, parse_vertex
+from .ai import (
+    AIConfig,
+    EngineError,
+    EngineUnavailable,
+    KataGoGTP,
+    Position,
+    add_cli_arguments,
+    discover_config,
+    overrides_from_args,
+)
+from .board import BLACK, KO_RULES, PASS, WHITE, IllegalMove, format_vertex, parse_vertex
 from .game import Game, GameOver
+from .player import RESIGN
 from .record import (
     DEFAULT_FORMAT,
     GameRecord,
@@ -217,12 +228,14 @@ PAGE = r"""<!doctype html>
 
     <aside class="panel">
       <div class="actions" id="actions">
+        <button id="b-ai" disabled>AI 落子</button>
         <button id="b-pass">停一手</button>
         <button id="b-undo">悔棋</button>
         <button id="b-resign">认输</button>
         <button id="b-dead">标记死子: 关</button>
         <button id="b-finish">完成数子</button>
       </div>
+      <div class="hint" id="ai-hint"></div>
 
       <fieldset class="card">
         <legend>新局</legend>
@@ -299,6 +312,7 @@ let state = null;
 let deadMode = false;
 let hover = null;
 let hoverKey = '';
+let aiBusy = false;
 
 async function api(path, payload = {}) {
   const res = await fetch(path, {
@@ -314,6 +328,20 @@ async function loadState() {
   const res = await fetch('/api/state');
   state = await res.json();
   render();
+}
+
+async function aiMove() {
+  if (aiBusy || !state || !state.ai_available || state.over) return;
+  aiBusy = true;
+  const button = document.getElementById('b-ai');
+  button.disabled = true;
+  button.textContent = 'AI 思考中…';
+  try {
+    await api('/api/ai');
+  } finally {
+    aiBusy = false;
+    render();
+  }
 }
 
 function hoshiPoints(size) {
@@ -539,6 +567,12 @@ function render() {
   ['PB','PW','EV','DT'].forEach(k => { document.getElementById('m-'+k).value = md[k] || ''; });
   document.getElementById('m-komi').value = state.komi;
   document.getElementById('m-ko').value = state.ko;
+  const aiButton = document.getElementById('b-ai');
+  aiButton.disabled = !state.ai_available || state.ai_thinking || state.over;
+  aiButton.textContent = state.ai_thinking ? 'AI 思考中…' : 'AI 落子';
+  document.getElementById('ai-hint').textContent = state.ai_available
+    ? (state.ai_name ? '引擎：' + state.ai_name : '')
+    : (state.ai_hint || '');
   const dot = document.getElementById('turn-dot');
   dot.className = 'turn-dot ' + (state.over ? 'is-over' : (state.to_play === 1 ? 'is-black' : 'is-white'));
 }
@@ -573,6 +607,7 @@ canvas.addEventListener('mouseleave', () => {
 
 canvas.addEventListener('click', e => {
   if (!state) return;
+  if (state.ai_thinking) return;
   if (!deadMode && state.over) return;
   const p = pointFromEvent(e);
   if (!p) return;
@@ -580,6 +615,7 @@ canvas.addEventListener('click', e => {
   api(deadMode ? '/api/dead' : '/api/move', { vertex });
 });
 
+document.getElementById('b-ai').onclick = aiMove;
 document.getElementById('b-pass').onclick = () => api('/api/pass');
 document.getElementById('b-undo').onclick = () => api('/api/undo');
 document.getElementById('b-resign').onclick = () => api('/api/resign');
@@ -612,13 +648,42 @@ loadState();
 
 
 class WebGame:
-    def __init__(self, record_dir=None):
+    def __init__(
+        self,
+        record_dir=None,
+        engine=None,
+        ai_config=None,
+        ai_overrides=None,
+        ai_config_path=None,
+    ):
         self.record_dir = Path(record_dir) if record_dir else default_record_dir()
         self.game = Game()
         self.metadata: dict = {}
         self.finished = False
         self.message = ""
         self._lock = threading.Lock()
+        self.engine = engine
+        self.ai_thinking = False
+        self.ai_hint = ""
+        if self.engine is None and ai_config is not False:
+            try:
+                config = (
+                    ai_config
+                    if isinstance(ai_config, AIConfig)
+                    else discover_config(ai_overrides, config_path=ai_config_path)
+                )
+            except ValueError as error:
+                config = None
+                self.ai_hint = str(error)
+            if config is None:
+                if not self.ai_hint:
+                    self.ai_hint = "未检测到 KataGo；macOS 可运行 brew install katago"
+            elif not config.available():
+                self.ai_hint = config.missing_reason()
+            else:
+                self.engine = KataGoGTP(config)
+        elif self.engine is None and ai_config is False:
+            self.ai_hint = "AI 已禁用"
 
     def to_state(self) -> dict:
         g = self.game
@@ -646,7 +711,69 @@ class WebGame:
             "message": self.message,
             "records_dir": str(self.record_dir),
             "ko_rules": list(KO_RULES),
+            "ai_available": self._ai_available(),
+            "ai_thinking": self.ai_thinking,
+            "ai_hint": self.ai_hint,
+            "ai_name": getattr(self.engine, "name", "") if self.engine is not None else "",
         }
+
+    def _ai_available(self) -> bool:
+        try:
+            return bool(self.engine is not None and self.engine.available())
+        except Exception:
+            return False
+
+    @staticmethod
+    def _position_key(position: Position):
+        return (position.size, position.komi, position.ko_rule, position.moves, position.grid)
+
+    def request_ai_move(self) -> dict:
+        if self.engine is None:
+            raise EngineUnavailable(self.ai_hint or "AI 不可用")
+        if not self._ai_available():
+            reason = getattr(self.engine, "unavailable_reason", lambda: self.ai_hint)()
+            raise EngineUnavailable(reason or self.ai_hint or "AI 不可用")
+        with self._lock:
+            if self.ai_thinking:
+                raise EngineError("AI 正在思考，请稍候")
+            if self.game.over:
+                raise GameOver("game is already over")
+            position = Position.from_game(self.game)
+            key = self._position_key(position)
+            self.ai_thinking = True
+            self.ai_hint = ""
+        try:
+            move = self.engine.genmove(position)
+        except EngineError as error:
+            with self._lock:
+                self.ai_thinking = False
+                self.ai_hint = str(error)
+            raise
+        except Exception as error:
+            with self._lock:
+                self.ai_thinking = False
+                self.ai_hint = str(error)
+            raise EngineError(f"AI 调用失败：{error}") from error
+        with self._lock:
+            self.ai_thinking = False
+            current = Position.from_game(self.game)
+            if self._position_key(current) != key:
+                self.message = "AI 落子已取消：局面已变化"
+                return self.to_state()
+            if move == RESIGN:
+                self.game.resign()
+            elif move == PASS:
+                self.game.pass_move()
+            else:
+                try:
+                    self.game.play(move)
+                except IllegalMove:
+                    self.message = f"AI 返回非法手：{format_vertex(move, self.game.board.size)}"
+            return self.to_state()
+
+    def close(self) -> None:
+        if self.engine is not None:
+            self.engine.close()
 
     def dispatch(self, action: str, payload: dict) -> dict:
         with self._lock:
@@ -782,9 +909,12 @@ def make_handler(webgame: WebGame):
             action = self.path[len("/api/") :]
             payload = self._read_payload()
             try:
-                state = webgame.dispatch(action, payload)
+                if action == "ai":
+                    state = webgame.request_ai_move()
+                else:
+                    state = webgame.dispatch(action, payload)
                 self._send_json(state)
-            except (IllegalMove, GameOver, ValueError, OSError, SGFError) as error:
+            except (IllegalMove, GameOver, ValueError, OSError, SGFError, EngineError) as error:
                 with webgame._lock:
                     webgame.message = str(error)
                     self._send_json(webgame.to_state(), 400)
@@ -792,8 +922,21 @@ def make_handler(webgame: WebGame):
     return Handler
 
 
-def run(host="127.0.0.1", port=8080, record_dir=None, open_browser=True):
-    webgame = WebGame(record_dir=record_dir)
+def run(
+    host="127.0.0.1",
+    port=8080,
+    record_dir=None,
+    open_browser=True,
+    ai_config=None,
+    ai_overrides=None,
+    ai_config_path=None,
+):
+    webgame = WebGame(
+        record_dir=record_dir,
+        ai_config=ai_config,
+        ai_overrides=ai_overrides,
+        ai_config_path=ai_config_path,
+    )
     server = ThreadingHTTPServer((host, port), make_handler(webgame))
     url = f"http://{host}:{port}/"
     if open_browser:
@@ -807,6 +950,7 @@ def run(host="127.0.0.1", port=8080, record_dir=None, open_browser=True):
     except KeyboardInterrupt:
         print("\n已退出")
     finally:
+        webgame.close()
         server.server_close()
     return 0
 
@@ -817,12 +961,17 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--record-dir", default=str(default_record_dir()))
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
+    parser.add_argument("--no-ai", action="store_true", help="不自动启用 KataGo")
+    add_cli_arguments(parser)
     args = parser.parse_args(argv)
     return run(
         host=args.host,
         port=args.port,
         record_dir=args.record_dir,
         open_browser=not args.no_open,
+        ai_config=False if args.no_ai else None,
+        ai_overrides=overrides_from_args(args),
+        ai_config_path=args.ai_config,
     )
 
 

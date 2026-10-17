@@ -3,8 +3,8 @@
 纯 Python、零依赖的本地围棋：**规则内核 + 命令行对弈 + 浏览器图形界面 + 棋谱（SGF / 文本）**。
 
 支持两人交替落子、提子、禁入点、可选劫规则、悔棋、认输、标记死子与终局数子；
-可把对局保存为标准 SGF 或文本棋谱，并加载已有 SGF 逐步回放。全部使用 Python 标准库，
-无需安装任何第三方依赖。
+可把对局保存为标准 SGF 或文本棋谱，并加载已有 SGF 逐步回放。核心全部使用 Python 标准库，
+无需安装任何第三方依赖；KataGo AI 是**可选**的外部引擎（见下文）。
 
 ![界面截图](docs/screenshot-ear-reddening.png)
 
@@ -18,6 +18,7 @@
 - 使用 `python3` 命令（部分系统没有 `python` 别名）。
 - 零第三方依赖：无需虚拟环境，无需 `pip install`。
 - 命令行界面不需要图形库；浏览器界面只需任意现代浏览器。
+- AI 对弈/落子为可选功能，需要另外安装 KataGo 和模型；未安装时其余功能不受影响。
 
 ## 目录结构
 
@@ -28,6 +29,7 @@ python-weiqi/
 ├── PROJECT_LOG.md         项目日志（设计决策与开发记录）
 ├── LICENSE                MIT 许可证
 ├── .gitignore
+├── ai.example.json        可选 AI 配置示例（复制为 ai.json 使用）
 ├── docs/
 │   ├── screenshot-ear-reddening.png  界面截图
 │   └── ear-reddening-opening.sgf     截图所用开局（公有领域）
@@ -41,7 +43,11 @@ python-weiqi/
 │   ├── sgf.py             SGF 解析/序列化与坐标转换
 │   ├── record.py          棋谱模型 GameRecord：与 Game 互转、存取、回放步
 │   ├── web.py             浏览器图形界面（内置 HTTP 服务 + 单页前端）
-│   └── cli.py             命令行界面：对弈、保存/加载、打谱回放
+│   ├── cli.py             命令行界面：对弈、保存/加载、打谱回放
+│   └── ai/                可选 AI：KataGo GTP 客户端（核心仍零依赖）
+│       ├── base.py        引擎协议、局面快照、EnginePlayer
+│       ├── config.py      ai.json / 环境变量 / Homebrew 自动发现
+│       └── katago.py      KataGo 子进程、GTP 协议、超时与重连
 └── tests/
     ├── test_board.py      内核单元测试（14 个用例）
     ├── test_sgf.py        SGF/棋谱与保存格式单元测试（32 个用例）
@@ -49,7 +55,9 @@ python-weiqi/
     ├── test_settings.py   设置模式测试（11 个用例）
     ├── test_ko.py         劫规则测试（11 个用例）
     ├── test_help.py       帮助系统测试（14 个用例）
-    └── test_web.py        图形界面 API 与页面测试（12 个用例）
+    ├── test_web.py        图形界面 API 与页面测试（12 个用例）
+    ├── test_ai.py         AI 配置与 GTP 协议测试（11 个用例）
+    └── test_web_ai.py     网页 AI 接口测试（9 个用例）
 ```
 
 ## 快速开始
@@ -70,7 +78,7 @@ python3 -m unittest discover -s tests -v
 期望输出结尾为：
 
 ```
-Ran 102 tests in 0.00s
+Ran 122 tests in 1.6s
 
 OK
 ```
@@ -94,6 +102,11 @@ python3 main.py --load game.sgf
 # 浏览器图形界面
 python3 main.py web                # 默认 127.0.0.1:8080 并自动打开浏览器
 python3 main.py web --port 9000 --no-open
+
+# 可选 AI（需先安装 KataGo，见下文）
+python3 main.py --ai                       # AI 执白
+python3 main.py --ai --ai-color black      # AI 执黑
+python3 main.py --ai --ai-visits 200       # 控制强度/速度
 ```
 
 ### 3. 图形界面（浏览器）
@@ -113,7 +126,7 @@ python3 main.py web
 - **棋谱**：输入文件名保存/载入（默认棋谱目录 `records/`），保存可选格式后缀
   （`.sgf` / `.txt`，见下）。
 - **设置/元信息**：黑方/白方/赛事/日期、贴目、劫规则，保存时写入 SGF。
-- 选项：`--host`、`--port`、`--record-dir`、`--no-open`。
+- 选项：`--host`、`--port`、`--record-dir`、`--no-open`、`--no-ai` 及 `--ai-*`。
 - 界面为内置单页 HTML/JS（Canvas 绘制），通过 JSON API 与同一套规则内核交互，
   与命令行共用 `Board`/`Game`/`GameRecord`。
 
@@ -122,6 +135,80 @@ python3 main.py web
 ```bash
 python3 -m goban --size 9
 ```
+
+## 可选 AI：KataGo
+
+核心仍然是零依赖的本地围棋；AI 是**可选外部引擎**。检测到 KataGo 时：
+
+- 命令行：`--ai` 让 AI 执白（默认），`--ai-color black` 让 AI 执黑；
+- 网页：出现「AI 落子」按钮，点一下让引擎走一手；
+- 找不到引擎或模型时，普通双人对弈不受影响，界面/终端会提示缺少什么。
+
+### macOS 安装
+
+```bash
+brew install katago
+```
+
+Homebrew 会安装 `katago` 可执行文件、示例配置和三个网络（b18/b20/b40，约 345 MB）。
+引擎和模型在 `$(brew --prefix katago)/share/katago` 下，可用 `brew list --verbose katago` 查看。
+
+Linux / Windows 可从 [KataGo Releases](https://github.com/lightvector/KataGo/releases)
+下载对应后端的可执行文件，再从 [katagotraining.org](https://katagotraining.org/networks/)
+下载一个 `.bin.gz` 网络。macOS Apple Silicon 的 Homebrew 版本使用 Metal 后端。
+
+### 配置
+
+不写配置也能自动发现：先找 `PATH` 里的 `katago`，再找 Homebrew 的
+`share/katago/*.bin.gz`（优先 `b18c384nbt`；human/g170/b20/b40 排后）。
+
+需要固定路径或调参时，把 [`ai.example.json`](ai.example.json) 复制为 `ai.json`：
+
+```json
+{
+  "binary": "katago",
+  "model": "/opt/homebrew/opt/katago/share/katago/kata1-b18c384nbt-....bin.gz",
+  "gtp_config": "/opt/homebrew/opt/katago/share/katago/configs/gtp_example.cfg",
+  "max_visits": 300,
+  "max_time": null,
+  "timeout": 30
+}
+```
+
+`ai.json` 和 `models/` 已在 `.gitignore` 中，**模型不要提交进仓库**。
+也可以用命令行/环境变量覆盖：
+
+```bash
+python3 main.py --ai --ai-model /path/to/model.bin.gz
+KATAGO_BIN=/path/to/katago KATAGO_MODEL=/path/to/model.bin.gz python3 main.py --ai
+```
+
+完整选项：`--ai-bin`、`--ai-model`、`--ai-gtp-config`、`--ai-config`、
+`--ai-visits`、`--ai-time`、`--ai-timeout`。
+
+### 网页使用
+
+```bash
+python3 main.py web
+```
+
+检测到引擎后，「AI 落子」按钮可用；没有引擎时按钮禁用并显示原因。
+`--no-ai` 可显式关闭自动检测。AI 在服务器请求线程中思考，不会阻塞其他页面请求；
+如果思考期间局面被改动，这次 AI 落子会被安全取消。
+
+### 强度与规则
+
+- `--ai-visits N`：每手最大访问数，默认 300；越低越快、越弱。
+- `--ai-time S`：每手最大思考秒数（与访问数同时生效，先到先停）。
+- 默认规则映射：`chinese` → `chinese-ogs`（位置超级劫）、`simple` → `chinese`、
+  `situational` → `aga`、`japanese` → `japanese`。本项目最终数子仍用面积法，
+  AI 的目差只作参考。
+
+### 体积与许可证
+
+- 引擎本体约 10–50 MB；一个 b18 模型约 93 MB；Homebrew 因带三个网络约 345 MB。
+- KataGo 引擎为 MIT 许可；官方网络使用 KataGo Neural Network License（MIT 风格），
+  g170 老网络为 CC0。再分发时请保留许可与来源。
 
 ## 交互说明
 
@@ -160,7 +247,7 @@ printf 'D4\nE4\npass\npass\n' | python3 main.py --size 9
 
 - **缩略信息**：对弈中输入 `help`（或 `h`/`?`），列出当前阶段所有命令的一行摘要。
 - **详细信息**：`help <名称>`，例如 `help save`、`help dead`、`help set`；也可查询功能主题
-  `help coordinates`、`rules`、`scoring`、`sgf`、`records`、`limitations`。
+  `help coordinates`、`rules`、`scoring`、`ai`、`sgf`、`records`、`limitations`。
 - **全部详情**：`help all`。
 - **命令行**：`python3 main.py help`（总览）、`python3 main.py help scoring`（某主题）、
   `python3 main.py --help`（argparse 选项）。
