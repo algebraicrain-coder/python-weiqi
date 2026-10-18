@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -44,6 +45,29 @@ class Position:
             to_play=game.board.to_play,
             grid=tuple(game.board.grid),
         )
+
+    def key(self) -> str:
+        """局面的稳定指纹，用于缓存和判断分析结果是否已过期。"""
+        payload = repr((self.size, self.komi, self.ko_rule, self.moves, self.grid))
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    def has_setup(self) -> bool:
+        """盘面是否包含 move 重放之外的摆子（SGF 的 AB/AW）。"""
+        if not self.grid:
+            return False
+        from ..board import Board, IllegalMove
+
+        board = Board(self.size, self.komi, self.ko_rule)
+        try:
+            for color, move in self.moves:
+                board.to_play = color
+                if move == PASS:
+                    board.pass_move()
+                else:
+                    board.play(move)
+        except IllegalMove:
+            return True
+        return tuple(board.grid) != self.grid
 
 
 class Engine(Protocol):

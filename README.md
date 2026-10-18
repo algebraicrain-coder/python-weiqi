@@ -47,7 +47,8 @@ python-weiqi/
 │   └── ai/                可选 AI：KataGo GTP 客户端（核心仍零依赖）
 │       ├── base.py        引擎协议、局面快照、EnginePlayer
 │       ├── config.py      ai.json / 环境变量 / Homebrew 自动发现
-│       └── katago.py      KataGo 子进程、GTP 协议、超时与重连
+│       ├── katago.py      KataGo 子进程、GTP 协议、超时与重连
+│       └── analysis.py    实时分析：JSON 流、胜率/目差/候选点/领地
 └── tests/
     ├── test_board.py      内核单元测试（14 个用例）
     ├── test_sgf.py        SGF/棋谱与保存格式单元测试（32 个用例）
@@ -57,7 +58,8 @@ python-weiqi/
     ├── test_help.py       帮助系统测试（14 个用例）
     ├── test_web.py        图形界面 API 与页面测试（12 个用例）
     ├── test_ai.py         AI 配置与 GTP 协议测试（11 个用例）
-    └── test_web_ai.py     网页 AI 接口测试（9 个用例）
+    ├── test_web_ai.py     网页 AI 接口测试（9 个用例）
+    └── test_analysis.py   实时分析解析/服务/HTTP 测试（8 个用例）
 ```
 
 ## 快速开始
@@ -78,7 +80,7 @@ python3 -m unittest discover -s tests -v
 期望输出结尾为：
 
 ```
-Ran 122 tests in 1.6s
+Ran 130 tests in 4.2s
 
 OK
 ```
@@ -172,6 +174,7 @@ Linux / Windows 可从 [KataGo Releases](https://github.com/lightvector/KataGo/r
   "binary": "katago",
   "model": "/opt/homebrew/opt/katago/share/katago/kata1-b18c384nbt-....bin.gz",
   "gtp_config": "/opt/homebrew/opt/katago/share/katago/configs/gtp_example.cfg",
+  "analysis_config": "/opt/homebrew/opt/katago/share/katago/configs/analysis_example.cfg",
   "max_visits": 300,
   "max_time": null,
   "timeout": 30
@@ -186,8 +189,8 @@ python3 main.py --ai --ai-model /path/to/model.bin.gz
 KATAGO_BIN=/path/to/katago KATAGO_MODEL=/path/to/model.bin.gz python3 main.py --ai
 ```
 
-完整选项：`--ai-bin`、`--ai-model`、`--ai-gtp-config`、`--ai-config`、
-`--ai-visits`、`--ai-time`、`--ai-timeout`。
+完整选项：`--ai-bin`、`--ai-model`、`--ai-gtp-config`、`--ai-analysis-config`、
+`--ai-config`、`--ai-visits`、`--ai-time`、`--ai-timeout`。
 
 ### 网页使用
 
@@ -198,6 +201,20 @@ python3 main.py web
 检测到引擎后，「AI 落子」按钮可用；没有引擎时按钮禁用并显示原因。
 `--no-ai` 可显式关闭自动检测。AI 在服务器请求线程中思考，不会阻塞其他页面请求；
 如果思考期间局面被改动，这次 AI 落子会被安全取消。
+
+### 实时分析
+
+网页右侧有「AI 分析」卡片。点「分析: 开」后：
+
+- 后台用 `katago analysis` 的 JSON 流持续分析当前局面，每 0.2 秒推送一次中间结果；
+- 显示**黑方胜率、目差、前 6 个候选点**（含访问数/胜率/目差）；
+- 在棋盘上叠加 `ownership` 领地预测（黑色=黑方、白色=白方，半透明）；
+- 每走一手会自动取消旧分析并分析新局面，不会把旧结果画到新棋盘上；
+- 分析进程和落子引擎分开，不会阻塞「AI 落子」。
+
+分析需要 `analysis_example.cfg`；Homebrew 已自带，也可用 `--ai-analysis-config`
+或 `ai.json` 的 `analysis_config` 指定。分析访问数沿用 `--ai-visits`（默认 300），
+网页每 250ms 拉取一次最新快照。
 
 ### 强度与规则
 
@@ -396,7 +413,7 @@ count > done         # 移除所有标记的死子，再按面积法数子
 - 保存棋谱时，被标记的死子以 `AE[...]` 记录在末尾，重新加载后位置一致。
 
 > ⚠️ **注意：这是临时方案，并非好方案。** 手动标记依赖使用者正确判读死活，容易出错，
-> 也不适合自动对局/AI 场景。更理想的做法是自动死活判定（如 Benson 无条件活、
+> 也不适合无人值守的自动数子场景。更理想的做法是自动死活判定（如 Benson 无条件活、
 > 或搜索/神经网络判定）或强制把死子提净后再结算。当前先用手动标记保证"结果可被
 > 人工修正"，后续再替换。
 
@@ -418,10 +435,10 @@ count > done         # 移除所有标记的死子，再按面积法数子
 
 ## 后续计划
 
-1. AI 对手：先随机走子，再蒙特卡洛（MC），最后 MCTS/UCT。
-   - 只需新增 `AIPlayer(Player)`，在 `cli.py` / `web.py` 中替换玩家来源即可，内核不动。
+1. AI：可选 KataGo 已接入（GTP 对弈 + 实时分析）；后续可接 human SL 强度档位、
+   整局复盘（analysis `analyzeTurns`）与胜率曲线。
 2. 棋谱进阶：变化图（分支）、注释与棋盘标记、棋谱库索引与检索。
-3. 扩展功能：GTP 协议对接外部引擎（GNU Go / KataGo）、日本规则数目法。
+3. 其他：自动死活判定、日本规则数目法；核心 MCTS 仍可作为无外部依赖的轻量后备。
 
 ## 许可证
 

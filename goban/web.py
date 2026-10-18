@@ -10,8 +10,10 @@ from pathlib import Path
 
 from .ai import (
     AIConfig,
+    AnalysisService,
     EngineError,
     EngineUnavailable,
+    KataGoAnalysis,
     KataGoGTP,
     Position,
     add_cli_arguments,
@@ -189,6 +191,21 @@ PAGE = r"""<!doctype html>
     box-shadow: 0 0 0 3px rgba(44,143,118,.18);
   }
   .hint { margin-top: 10px; font-size: 11.5px; line-height: 1.5; color: var(--muted); word-break: break-all; }
+  .analysis-row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 4px 0; border-bottom: 1px dashed var(--line);
+    font-size: 12px; font-variant-numeric: tabular-nums;
+  }
+  .analysis-row:last-child { border-bottom: 0; }
+  .analysis-row .rank { width: 18px; color: var(--muted); }
+  .analysis-row .mv { width: 42px; font-weight: 600; }
+  .analysis-row .wr { width: 58px; text-align: right; }
+  .analysis-row .sc { width: 52px; text-align: right; color: var(--muted); }
+  .analysis-row.best .mv, .analysis-row.best .wr { color: var(--accent); }
+  .analysis-head { font-size: 12px; line-height: 1.6; margin-bottom: 4px; }
+  .analysis-head b { color: var(--accent); }
+  .winbar { height: 8px; border-radius: 999px; background: #e8dfcf; overflow: hidden; margin: 6px 0 8px; }
+  .winbar span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #111, #555); transition: width .25s ease; }
   @media (max-width: 1020px) {
     .layout { grid-template-columns: 1fr; }
     .panel { max-width: 720px; width: 100%; margin: 0 auto; }
@@ -236,6 +253,15 @@ PAGE = r"""<!doctype html>
         <button id="b-finish">完成数子</button>
       </div>
       <div class="hint" id="ai-hint"></div>
+
+      <fieldset class="card">
+        <legend>AI 分析</legend>
+        <button id="b-analysis" class="block">分析: 关</button>
+        <div class="hint" id="analysis-hint"></div>
+        <div class="analysis-head" id="analysis-summary"></div>
+        <div class="winbar"><span id="winbar-black"></span></div>
+        <div id="analysis-moves"></div>
+      </fieldset>
 
       <fieldset class="card">
         <legend>新局</legend>
@@ -313,6 +339,9 @@ let deadMode = false;
 let hover = null;
 let hoverKey = '';
 let aiBusy = false;
+let analysisEnabled = false;
+let analysis = null;
+let analysisTimer = null;
 
 async function api(path, payload = {}) {
   const res = await fetch(path, {
@@ -328,6 +357,19 @@ async function loadState() {
   const res = await fetch('/api/state');
   state = await res.json();
   render();
+  await loadAnalysisState();
+}
+
+async function loadAnalysisState() {
+  try {
+    const res = await fetch('/api/analysis');
+    analysis = await res.json();
+    analysisEnabled = !!analysis.enabled;
+    if (analysisEnabled) startAnalysisPolling();
+    renderAnalysis();
+  } catch (error) {
+    // 分析接口不可用时不影响对弈
+  }
 }
 
 async function aiMove() {
@@ -342,6 +384,104 @@ async function aiMove() {
     aiBusy = false;
     render();
   }
+}
+
+async function toggleAnalysis() {
+  const next = !analysisEnabled;
+  try {
+    await api('/api/analysis', { enabled: next });
+  } catch (error) {
+    // api() 已把错误写进 state.message
+  }
+  analysisEnabled = !!(state && state.analysis_enabled);
+  if (analysisEnabled) {
+    startAnalysisPolling();
+  } else {
+    stopAnalysisPolling();
+    analysis = null;
+    draw();
+  }
+  renderAnalysis();
+}
+
+function startAnalysisPolling() {
+  if (analysisTimer) return;
+  const tick = async () => {
+    try {
+      const res = await fetch('/api/analysis');
+      analysis = await res.json();
+      renderAnalysis();
+      draw();
+    } catch (error) {
+      // 网络失败时保留上一次结果
+    }
+  };
+  tick();
+  analysisTimer = setInterval(tick, 250);
+}
+
+function stopAnalysisPolling() {
+  if (analysisTimer) {
+    clearInterval(analysisTimer);
+    analysisTimer = null;
+  }
+}
+
+function renderAnalysis() {
+  const button = document.getElementById('b-analysis');
+  const hint = document.getElementById('analysis-hint');
+  const summary = document.getElementById('analysis-summary');
+  const list = document.getElementById('analysis-moves');
+  const bar = document.getElementById('winbar-black');
+  if (!button || !hint || !summary || !list || !bar) return;
+  const available = !!(state && state.analysis_available);
+  bar.style.width = '0%';
+  button.disabled = !available;
+  button.textContent = '分析: ' + (analysisEnabled ? '开' : '关');
+  button.classList.toggle('primary', analysisEnabled);
+  if (!available) {
+    hint.textContent = (state && state.analysis_hint) || '分析不可用';
+    summary.textContent = '';
+    list.innerHTML = '';
+    return;
+  }
+  if (!analysisEnabled) {
+    hint.textContent = '点击开启实时分析';
+    summary.textContent = '';
+    list.innerHTML = '';
+    return;
+  }
+  hint.textContent = '胜率为黑方视角；正目差表示黑领先';
+  if (!analysis || analysis.error) {
+    hint.textContent = (analysis && analysis.error) || '分析中…';
+    summary.textContent = '';
+    list.innerHTML = '';
+    return;
+  }
+  const currentKey = state.position_key || analysis.current_key;
+  if (!analysis.analysis || analysis.analysis.key !== currentKey) {
+    summary.textContent = '分析中…';
+    list.innerHTML = '';
+    return;
+  }
+  const a = analysis.analysis;
+  const winrate = (a.root_winrate * 100).toFixed(1);
+  const score = (a.root_score_lead >= 0 ? '+' : '') + a.root_score_lead.toFixed(1);
+  summary.innerHTML = '黑胜率 <b>' + winrate + '%</b> · 目差 <b>' + score + '</b>' +
+    (a.during_search ? ' · 搜索中' : '');
+  bar.style.width = (a.root_winrate * 100).toFixed(1) + '%';
+  const moves = (a.moves || []).slice().sort((x, y) => x.order - y.order).slice(0, 6);
+  list.innerHTML = moves.map((m, i) => {
+    const vertex = m.vertex === 'pass' ? 'pass' : m.vertex;
+    const wr = (m.winrate * 100).toFixed(1) + '%';
+    const sc = (m.score_lead >= 0 ? '+' : '') + m.score_lead.toFixed(1);
+    return '<div class="analysis-row' + (i === 0 ? ' best' : '') + '">' +
+      '<span class="rank">' + (i + 1) + '</span>' +
+      '<span class="mv">' + vertex + '</span>' +
+      '<span class="wr">' + wr + '</span>' +
+      '<span class="sc">' + sc + '</span>' +
+      '</div>';
+  }).join('');
 }
 
 function hoshiPoints(size) {
@@ -528,8 +668,30 @@ function drawHover() {
   ctx.restore();
 }
 
+function drawOwnership() {
+  if (!analysisEnabled || !analysis || !analysis.analysis || !state) return;
+  const a = analysis.analysis;
+  if (!a.ownership || a.key !== (state.position_key || analysis.current_key)) return;
+  const g = geom();
+  if (a.ownership.length < g.size * g.size) return;
+  const half = g.cell * 0.22;
+  ctx.save();
+  for (let row = 0; row < g.size; row++) {
+    for (let col = 0; col < g.size; col++) {
+      const value = a.ownership[row * g.size + col];
+      if (Math.abs(value) < 0.15) continue;
+      const point = toScreen(col, g.size - 1 - row, g);
+      ctx.globalAlpha = Math.min(0.32, Math.abs(value) * 0.38);
+      ctx.fillStyle = value > 0 ? '#0b0b0b' : '#fffdf8';
+      ctx.fillRect(point.cx - half, point.cy - half, half * 2, half * 2);
+    }
+  }
+  ctx.restore();
+}
+
 function draw() {
   drawBoard();
+  drawOwnership();
   drawStones();
   drawHover();
 }
@@ -575,6 +737,7 @@ function render() {
     : (state.ai_hint || '');
   const dot = document.getElementById('turn-dot');
   dot.className = 'turn-dot ' + (state.over ? 'is-over' : (state.to_play === 1 ? 'is-black' : 'is-white'));
+  renderAnalysis();
 }
 
 function pointFromEvent(e) {
@@ -616,6 +779,7 @@ canvas.addEventListener('click', e => {
 });
 
 document.getElementById('b-ai').onclick = aiMove;
+document.getElementById('b-analysis').onclick = toggleAnalysis;
 document.getElementById('b-pass').onclick = () => api('/api/pass');
 document.getElementById('b-undo').onclick = () => api('/api/undo');
 document.getElementById('b-resign').onclick = () => api('/api/resign');
@@ -655,6 +819,7 @@ class WebGame:
         ai_config=None,
         ai_overrides=None,
         ai_config_path=None,
+        analyzer=None,
     ):
         self.record_dir = Path(record_dir) if record_dir else default_record_dir()
         self.game = Game()
@@ -665,6 +830,9 @@ class WebGame:
         self.engine = engine
         self.ai_thinking = False
         self.ai_hint = ""
+        self.ai_config = None
+        self.analysis_service = None
+        self.analysis_hint = ""
         if self.engine is None and ai_config is not False:
             try:
                 config = (
@@ -675,6 +843,7 @@ class WebGame:
             except ValueError as error:
                 config = None
                 self.ai_hint = str(error)
+            self.ai_config = config
             if config is None:
                 if not self.ai_hint:
                     self.ai_hint = "未检测到 KataGo；macOS 可运行 brew install katago"
@@ -684,6 +853,22 @@ class WebGame:
                 self.engine = KataGoGTP(config)
         elif self.engine is None and ai_config is False:
             self.ai_hint = "AI 已禁用"
+        elif isinstance(ai_config, AIConfig):
+            self.ai_config = ai_config
+
+        if analyzer is not None:
+            self.analysis_service = AnalysisService(self, analyzer)
+        elif self.ai_config is not None and self.ai_config.analysis_available():
+            self.analysis_service = AnalysisService(
+                self,
+                KataGoAnalysis(self.ai_config),
+            )
+        elif ai_config is False:
+            self.analysis_hint = "AI 已禁用"
+        elif self.ai_config is not None:
+            self.analysis_hint = self.ai_config.analysis_missing_reason()
+        else:
+            self.analysis_hint = self.ai_hint or "未检测到 KataGo"
 
     def to_state(self) -> dict:
         g = self.game
@@ -711,10 +896,14 @@ class WebGame:
             "message": self.message,
             "records_dir": str(self.record_dir),
             "ko_rules": list(KO_RULES),
+            "position_key": self._position_key(Position.from_game(g)),
             "ai_available": self._ai_available(),
             "ai_thinking": self.ai_thinking,
             "ai_hint": self.ai_hint,
             "ai_name": getattr(self.engine, "name", "") if self.engine is not None else "",
+            "analysis_available": self._analysis_available(),
+            "analysis_enabled": self.analysis_service.enabled if self.analysis_service else False,
+            "analysis_hint": self.analysis_hint,
         }
 
     def _ai_available(self) -> bool:
@@ -723,9 +912,53 @@ class WebGame:
         except Exception:
             return False
 
+    def _analysis_available(self) -> bool:
+        try:
+            return bool(
+                self.analysis_service is not None
+                and self.analysis_service.analyzer.available()
+            )
+        except Exception:
+            return False
+
+    def analysis_state(self) -> dict:
+        with self._lock:
+            current_key = self._position_key(Position.from_game(self.game))
+        if self.analysis_service is None:
+            return {
+                "available": False,
+                "enabled": False,
+                "hint": self.analysis_hint,
+                "analysis": None,
+                "current_key": current_key,
+                "error": "",
+            }
+        state = self.analysis_service.snapshot(current_key)
+        if not state.get("hint"):
+            state["hint"] = self.analysis_hint
+        return state
+
+    def set_analysis(self, enabled: bool) -> None:
+        if enabled:
+            if self.analysis_service is None:
+                raise EngineUnavailable(self.analysis_hint or "分析不可用")
+            if not self._analysis_available():
+                reason = getattr(
+                    self.analysis_service.analyzer,
+                    "unavailable_reason",
+                    lambda: self.analysis_hint,
+                )()
+                raise EngineUnavailable(reason or self.analysis_hint or "分析不可用")
+        if self.analysis_service is not None:
+            self.analysis_service.set_enabled(enabled)
+
+    def _invalidate_analysis(self) -> None:
+        if self.analysis_service is not None:
+            self.analysis_service.invalidate()
+
     @staticmethod
     def _position_key(position: Position):
-        return (position.size, position.komi, position.ko_rule, position.moves, position.grid)
+        return position.key()
 
     def request_ai_move(self) -> dict:
         if self.engine is None:
@@ -769,9 +1002,12 @@ class WebGame:
                     self.game.play(move)
                 except IllegalMove:
                     self.message = f"AI 返回非法手：{format_vertex(move, self.game.board.size)}"
+            self._invalidate_analysis()
             return self.to_state()
 
     def close(self) -> None:
+        if self.analysis_service is not None:
+            self.analysis_service.close()
         if self.engine is not None:
             self.engine.close()
 
@@ -794,6 +1030,7 @@ class WebGame:
         self.game = Game(size, komi, ko)
         self.metadata = {}
         self.finished = False
+        self._invalidate_analysis()
 
     def _do_move(self, payload):
         if self.game.over:
@@ -803,22 +1040,27 @@ class WebGame:
             self.game.play(idx)
         except IllegalMove:
             self.message = f"illegal move: {payload['vertex']}"
+        else:
+            self._invalidate_analysis()
 
     def _do_pass(self, payload):
         if self.game.over:
             raise GameOver("game is already over")
         self.game.pass_move()
+        self._invalidate_analysis()
 
     def _do_undo(self, payload):
         try:
             self.game.undo()
             self.finished = False
+            self._invalidate_analysis()
         except IllegalMove:
             self.message = "no move to undo"
 
     def _do_resign(self, payload):
         if not self.game.over:
             self.game.resign()
+            self._invalidate_analysis()
 
     def _do_dead(self, payload):
         idx = self._vertex(payload)
@@ -840,6 +1082,10 @@ class WebGame:
             self.game.board.komi = float(payload["komi"])
         if payload.get("ko") in KO_RULES:
             self.game.board.ko_rule = payload["ko"]
+        self._invalidate_analysis()
+
+    def _do_analysis(self, payload):
+        self.set_analysis(bool(payload.get("enabled")))
 
     def _do_save(self, payload):
         fmt = str(payload.get("format") or DEFAULT_FORMAT).lower()
@@ -860,6 +1106,7 @@ class WebGame:
         merge_record_metadata(self.metadata, record)
         self.finished = False
         self.message = f"loaded {name}"
+        self._invalidate_analysis()
 
 
 def make_handler(webgame: WebGame):
@@ -899,6 +1146,8 @@ def make_handler(webgame: WebGame):
             elif self.path == "/api/state":
                 with webgame._lock:
                     self._send_json(webgame.to_state())
+            elif self.path == "/api/analysis":
+                self._send_json(webgame.analysis_state())
             else:
                 self._send_json({"error": "not found"}, 404)
 

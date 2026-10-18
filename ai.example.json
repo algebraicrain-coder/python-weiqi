@@ -2,6 +2,7 @@
   "binary": "katago",
   "model": "/path/to/kata1-b18c384nbt-....bin.gz",
   "gtp_config": "/path/to/gtp_example.cfg",
+  "analysis_config": "/path/to/analysis_example.cfg",
   "max_visits": 300,
   "max_time": null,
   "timeout": 30

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .analysis import Analysis, AnalysisCancelled, AnalysisService, KataGoAnalysis, MoveEval
 from .base import (
     Engine,
     EngineError,
@@ -26,8 +27,13 @@ def make_engine(config: AIConfig | None = None):
 
 __all__ = [
     "AIConfig",
+    "Analysis",
+    "AnalysisCancelled",
+    "AnalysisService",
     "Engine",
     "EngineError",
+    "KataGoAnalysis",
+    "MoveEval",
     "EnginePlayer",
     "EngineUnavailable",
     "KATAGO_RULES",

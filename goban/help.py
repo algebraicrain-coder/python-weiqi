@@ -397,17 +397,28 @@ ENTRIES: list[Entry] = [
         see_also=("--ai-color", "--ai-visits"),
     ),
     Entry(
-        "--ai-color black|white",
+        "--ai-color",
         "命令行：AI 执黑或执白",
         "cli",
+        aliases=("ai-color",),
+        detail="取值为 black 或 white；默认 white。",
         examples=("python3 main.py --ai --ai-color black",),
     ),
     Entry(
-        "--ai-visits N",
+        "--ai-visits",
         "命令行：限制 AI 每手访问数",
         "cli",
+        aliases=("ai-visits",),
         detail="访问数越低越弱、越快；不指定时使用 ai.json 或默认值 300。",
         examples=("python3 main.py --ai --ai-visits 100",),
+    ),
+    Entry(
+        "--ai-analysis-config",
+        "命令行：KataGo analysis_example.cfg 路径",
+        "cli",
+        aliases=("ai-analysis-config",),
+        detail="用于网页实时分析；不指定时自动在 Homebrew share/katago/configs 下查找。",
+        examples=("python3 main.py web --ai-analysis-config /path/to/analysis.cfg",),
     ),
     Entry(
         "--load FILE",
@@ -443,8 +454,8 @@ ENTRIES: list[Entry] = [
         detail=(
             "启动本地 HTTP 服务器并在浏览器打开棋盘界面（纯标准库，无第三方依赖）。"
             "点击落子，按钮停一手/悔棋/认输/标记死子/完成数子/新局/存取棋谱/改元信息。"
-            "检测到 KataGo 时会出现「AI 落子」按钮；选项：--host/--port/--record-dir/"
-            "--no-open/--no-ai 及 --ai-* 参数。"
+            "检测到 KataGo 时会出现「AI 落子」和「AI 分析」；选项：--host/--port/"
+            "--record-dir/--no-open/--no-ai 及 --ai-* 参数。"
         ),
         examples=("python3 main.py web", "python3 main.py web --port 9000 --no-open"),
     ),
@@ -500,7 +511,20 @@ ENTRIES: list[Entry] = [
             "--ai-visits / --ai-time 控制强度。路径可用 ai.json 或 --ai-bin/--ai-model 固定。"
         ),
         examples=("python3 main.py --ai", "python3 main.py --ai --ai-visits 100"),
-        see_also=("--ai", "--ai-color black|white", "--ai-visits N"),
+        see_also=("--ai", "--ai-color", "--ai-visits", "analysis"),
+    ),
+    Entry(
+        "analysis",
+        "分析：实时胜率、候选点与领地",
+        "topic",
+        aliases=("analyze",),
+        detail=(
+            "网页「AI 分析」开关会启动独立的 katago analysis 进程，流式返回当前局面的"
+            "胜率、目差、前几个候选点和 ownership 领地预测；每走一手自动切换到新局面。"
+            "需要 analysis_example.cfg，可用 --ai-analysis-config 或 ai.json 指定。"
+        ),
+        examples=("python3 main.py web",),
+        see_also=("ai", "--ai-analysis-config"),
     ),
     Entry(
         "scoring",
@@ -536,8 +560,8 @@ ENTRIES: list[Entry] = [
         "已知限制",
         "topic",
         detail=(
-            "无自动死活判定（数子靠人工标记死子）；无日本规则；无 AI；棋盘上限 25 路；"
-            "变化图尚未提供交互式进入。"
+            "无自动死活判定（数子靠人工标记死子）；无日本规则；AI 为可选外部 KataGo"
+            "（需单独安装）；棋盘上限 25 路；变化图尚未提供交互式进入。"
         ),
     ),
 ]

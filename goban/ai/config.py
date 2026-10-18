@@ -15,6 +15,7 @@ class AIConfig:
     binary: str = ""
     model: str = ""
     gtp_config: str = ""
+    analysis_config: str = ""
     max_visits: int = DEFAULT_VISITS
     max_time: float | None = None
     timeout: float = DEFAULT_TIMEOUT
@@ -47,6 +48,30 @@ class AIConfig:
             return f"KataGo 模型不存在：{self.model}"
         if self.gtp_config and not Path(self.gtp_config).is_file():
             return f"KataGo 配置不存在：{self.gtp_config}"
+        return ""
+
+    def analysis_available(self) -> bool:
+        return bool(
+            self.binary_path()
+            and self.model
+            and Path(self.model).is_file()
+            and self.analysis_config
+            and Path(self.analysis_config).is_file()
+        )
+
+    def analysis_missing_reason(self) -> str:
+        if not self.binary:
+            return "未找到 katago 可执行文件；macOS 可运行 brew install katago"
+        if not self.binary_path():
+            return f"katago 不可执行：{self.binary}"
+        if not self.model:
+            return "未找到 KataGo 模型（.bin.gz）；可用 --ai-model 或 ai.json 指定"
+        if not Path(self.model).is_file():
+            return f"KataGo 模型不存在：{self.model}"
+        if not self.analysis_config:
+            return "未找到 analysis_example.cfg；可用 --ai-analysis-config 或 ai.json 指定"
+        if not Path(self.analysis_config).is_file():
+            return f"KataGo 分析配置不存在：{self.analysis_config}"
         return ""
 
 
@@ -109,6 +134,7 @@ def _env_overrides() -> dict:
         "binary": "KATAGO_BIN",
         "model": "KATAGO_MODEL",
         "gtp_config": "KATAGO_CONFIG",
+        "analysis_config": "KATAGO_ANALYSIS_CONFIG",
         "max_visits": "KATAGO_VISITS",
         "max_time": "KATAGO_TIME",
         "timeout": "KATAGO_TIMEOUT",
@@ -206,6 +232,21 @@ def _find_gtp_config(binary: str) -> str:
     return ""
 
 
+def _find_analysis_config(binary: str) -> str:
+    names = (
+        "configs/analysis_example.cfg",
+        "configs/analysis.cfg",
+        "analysis_example.cfg",
+        "analysis.cfg",
+    )
+    for directory in _model_dirs(binary):
+        for name in names:
+            path = directory / name
+            if path.is_file():
+                return str(path)
+    return ""
+
+
 def discover_config(overrides: dict | None = None, config_path=None) -> AIConfig | None:
     """按 CLI > 环境变量 > ai.json > 自动发现 的顺序组装配置。
 
@@ -230,7 +271,7 @@ def discover_config(overrides: dict | None = None, config_path=None) -> AIConfig
             base = path.parent
 
     merged: dict = {}
-    for key in ("binary", "model", "gtp_config"):
+    for key in ("binary", "model", "gtp_config", "analysis_config"):
         value = file_data.get(key)
         if value not in (None, ""):
             merged[key] = (
@@ -249,19 +290,25 @@ def discover_config(overrides: dict | None = None, config_path=None) -> AIConfig
         binary = shutil.which("katago") or ""
     model = _resolve_path(merged.get("model"), base)
     gtp_config = _resolve_path(merged.get("gtp_config"), base)
+    analysis_config = _resolve_path(merged.get("analysis_config"), base)
 
-    had_hint = bool(binary or model or gtp_config or file_data or overrides)
+    had_hint = bool(
+        binary or model or gtp_config or analysis_config or file_data or overrides
+    )
     if not had_hint:
         return None
     if not model and binary:
         model = _find_model(binary)
     if not gtp_config and binary:
         gtp_config = _find_gtp_config(binary)
+    if not analysis_config and binary:
+        analysis_config = _find_analysis_config(binary)
 
     return AIConfig(
         binary=binary,
         model=model,
         gtp_config=gtp_config,
+        analysis_config=analysis_config,
         max_visits=_as_int(merged.get("max_visits", DEFAULT_VISITS)),
         max_time=_as_optional_float(merged.get("max_time")),
         timeout=_as_timeout(merged.get("timeout", DEFAULT_TIMEOUT)),
@@ -272,6 +319,7 @@ def add_cli_arguments(parser) -> None:
     parser.add_argument("--ai-bin", help="KataGo 可执行文件路径（默认自动查找）")
     parser.add_argument("--ai-model", help="KataGo 模型 .bin.gz 路径")
     parser.add_argument("--ai-gtp-config", help="KataGo gtp.cfg 路径")
+    parser.add_argument("--ai-analysis-config", help="KataGo analysis_example.cfg 路径")
     parser.add_argument("--ai-config", help="AI 配置文件 ai.json 的路径")
     parser.add_argument("--ai-visits", type=int, default=None, help="每手最大访问数（默认 300）")
     parser.add_argument("--ai-time", type=float, default=None, help="每手最大思考秒数")
@@ -283,6 +331,7 @@ def overrides_from_args(args) -> dict:
         "binary": "ai_bin",
         "model": "ai_model",
         "gtp_config": "ai_gtp_config",
+        "analysis_config": "ai_analysis_config",
         "max_visits": "ai_visits",
         "max_time": "ai_time",
         "timeout": "ai_timeout",

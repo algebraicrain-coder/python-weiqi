@@ -9,8 +9,6 @@ from ..board import (
     BLACK,
     PASS,
     WHITE,
-    Board,
-    IllegalMove,
     format_vertex,
     parse_vertex,
 )
@@ -174,20 +172,7 @@ class KataGoGTP:
 
     @staticmethod
     def _has_setup(position: Position) -> bool:
-        """判断盘面是否包含 move 重放之外的摆子（SGF 的 AB/AW）。"""
-        if not position.grid:
-            return False
-        board = Board(position.size, position.komi, position.ko_rule)
-        try:
-            for color, move in position.moves:
-                board.to_play = color
-                if move == PASS:
-                    board.pass_move()
-                else:
-                    board.play(move)
-        except IllegalMove:
-            return True
-        return tuple(board.grid) != position.grid
+        return position.has_setup()
 
     def genmove(self, position: Position) -> int:
         with self._lock:

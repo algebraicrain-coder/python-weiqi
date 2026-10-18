@@ -307,6 +307,15 @@ python3 -m unittest discover -s tests -v
     首手为 Q16，单步约 2–3 秒；CLI `--ai` 实测正常。随后与 KataGo 下了一局 19 路
     （我执黑、简单人类策略，白方 300 visits），第 60 手黑棋认输，结果 W+R；棋谱保存在
     `records/19x19-vs-katago.sgf`（`records/` 已忽略，不进入仓库）。
+21. **实时分析（用户需求）**：新增 `goban/ai/analysis.py`，用 `katago analysis` 的 JSON
+    流实现实时分析：`Analysis`/`MoveEval` 数据模型、`KataGoAnalysis` 解析
+    `moveInfos/rootInfo/ownership`，`reportDuringSearchEvery=0.2` 持续推送中间结果；
+    `AnalysisService` 在后台线程按局面 key 分析，走子时取消旧查询。网页增加
+    `GET /api/analysis`、`analysis` 动作和「AI 分析」卡片：黑方胜率、目差、前 6 候选点
+    与棋盘 ownership 叠加，前端每 250ms 拉取快照。分析进程与落子引擎分离。
+    新增 8 个测试（`test_analysis.py`），总计 130 个；测试全部用 fake analyzer。
+    修复 `Analysis.key`（SHA1）与网页 `current_key`（原为 tuple）类型不一致的问题，
+    避免旧分析结果画到新棋盘。实测 19 路空盘约 2 秒出中间结果、5 秒左右完成 300 visits。
 
 ## 计分规则（用户提问澄清）
 
@@ -327,6 +336,7 @@ python3 -m unittest discover -s tests -v
 - 图形界面入口：`python3 main.py web [--port N --no-open]`。
 - 棋谱默认目录：`weiqi/records/`，可用 `--record-dir` 更改。
 - 依赖：仅标准库，无需 venv、无需安装。
-- 已完成：KataGo GTP 可选 AI（见第 19 条）；棋谱侧仍可做变化图、注释/标记与棋谱库检索。
-- 下一步：接 KataGo **analysis engine**（胜率/目差/PV/ownership 热图）、
-  human SL 强度档位与首次运行下载脚本；核心 MCTS 仍可作为无外部依赖的轻量后备。
+- 已完成：KataGo GTP 可选 AI（第 19 条）与实时分析（第 21 条）；棋谱侧仍可做变化图、
+  注释/标记与棋谱库检索。
+- 下一步：整局复盘（analysis `analyzeTurns`）与胜率曲线、human SL 强度档位、
+  首次运行下载脚本；核心 MCTS 仍可作为无外部依赖的轻量后备。

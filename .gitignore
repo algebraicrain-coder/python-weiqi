@@ -22,3 +22,7 @@ records/*
 # 可选 AI：本地配置与模型（不要提交，示例见 ai.example.json）
 ai.json
 models/
+
+# KataGo 运行日志（由引擎配置自动生成）
+analysis_logs/
+gtp_logs/
