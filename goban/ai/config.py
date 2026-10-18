@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_VISITS = 300
+DEFAULT_ANALYSIS_VISITS = 1000
 DEFAULT_TIMEOUT = 30.0
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class AIConfig:
     gtp_config: str = ""
     analysis_config: str = ""
     max_visits: int = DEFAULT_VISITS
+    analysis_visits: int = DEFAULT_ANALYSIS_VISITS
     max_time: float | None = None
     timeout: float = DEFAULT_TIMEOUT
 
@@ -136,6 +138,7 @@ def _env_overrides() -> dict:
         "gtp_config": "KATAGO_CONFIG",
         "analysis_config": "KATAGO_ANALYSIS_CONFIG",
         "max_visits": "KATAGO_VISITS",
+        "analysis_visits": "KATAGO_ANALYSIS_VISITS",
         "max_time": "KATAGO_TIME",
         "timeout": "KATAGO_TIMEOUT",
     }
@@ -279,7 +282,7 @@ def discover_config(overrides: dict | None = None, config_path=None) -> AIConfig
                 if key == "binary"
                 else _resolve_path(value, base)
             )
-    for key in ("max_visits", "max_time", "timeout"):
+    for key in ("max_visits", "analysis_visits", "max_time", "timeout"):
         if key in file_data:
             merged[key] = file_data[key]
     merged.update(_env_overrides())
@@ -310,6 +313,9 @@ def discover_config(overrides: dict | None = None, config_path=None) -> AIConfig
         gtp_config=gtp_config,
         analysis_config=analysis_config,
         max_visits=_as_int(merged.get("max_visits", DEFAULT_VISITS)),
+        analysis_visits=_as_int(
+            merged.get("analysis_visits", DEFAULT_ANALYSIS_VISITS)
+        ),
         max_time=_as_optional_float(merged.get("max_time")),
         timeout=_as_timeout(merged.get("timeout", DEFAULT_TIMEOUT)),
     )
@@ -321,7 +327,13 @@ def add_cli_arguments(parser) -> None:
     parser.add_argument("--ai-gtp-config", help="KataGo gtp.cfg 路径")
     parser.add_argument("--ai-analysis-config", help="KataGo analysis_example.cfg 路径")
     parser.add_argument("--ai-config", help="AI 配置文件 ai.json 的路径")
-    parser.add_argument("--ai-visits", type=int, default=None, help="每手最大访问数（默认 300）")
+    parser.add_argument("--ai-visits", type=int, default=None, help="对弈每手最大访问数（默认 300）")
+    parser.add_argument(
+        "--analysis-visits",
+        type=int,
+        default=None,
+        help="实时分析访问数（默认 1000；0 表示持续分析直到走子/关闭）",
+    )
     parser.add_argument("--ai-time", type=float, default=None, help="每手最大思考秒数")
     parser.add_argument("--ai-timeout", type=float, default=None, help="等待引擎响应的超时秒数（默认 30）")
 
@@ -333,6 +345,7 @@ def overrides_from_args(args) -> dict:
         "gtp_config": "ai_gtp_config",
         "analysis_config": "ai_analysis_config",
         "max_visits": "ai_visits",
+        "analysis_visits": "analysis_visits",
         "max_time": "ai_time",
         "timeout": "ai_timeout",
     }

@@ -59,7 +59,7 @@ python-weiqi/
     ├── test_web.py        图形界面 API 与页面测试（12 个用例）
     ├── test_ai.py         AI 配置与 GTP 协议测试（11 个用例）
     ├── test_web_ai.py     网页 AI 接口测试（9 个用例）
-    └── test_analysis.py   实时分析解析/服务/HTTP 测试（8 个用例）
+    └── test_analysis.py   实时分析解析/服务/HTTP 测试（9 个用例）
 ```
 
 ## 快速开始
@@ -80,7 +80,7 @@ python3 -m unittest discover -s tests -v
 期望输出结尾为：
 
 ```
-Ran 130 tests in 4.2s
+Ran 131 tests in 4.2s
 
 OK
 ```
@@ -176,6 +176,7 @@ Linux / Windows 可从 [KataGo Releases](https://github.com/lightvector/KataGo/r
   "gtp_config": "/opt/homebrew/opt/katago/share/katago/configs/gtp_example.cfg",
   "analysis_config": "/opt/homebrew/opt/katago/share/katago/configs/analysis_example.cfg",
   "max_visits": 300,
+  "analysis_visits": 1000,
   "max_time": null,
   "timeout": 30
 }
@@ -190,7 +191,7 @@ KATAGO_BIN=/path/to/katago KATAGO_MODEL=/path/to/model.bin.gz python3 main.py --
 ```
 
 完整选项：`--ai-bin`、`--ai-model`、`--ai-gtp-config`、`--ai-analysis-config`、
-`--ai-config`、`--ai-visits`、`--ai-time`、`--ai-timeout`。
+`--ai-config`、`--ai-visits`、`--analysis-visits`、`--ai-time`、`--ai-timeout`。
 
 ### 网页使用
 
@@ -213,8 +214,14 @@ python3 main.py web
 - 分析进程和落子引擎分开，不会阻塞「AI 落子」。
 
 分析需要 `analysis_example.cfg`；Homebrew 已自带，也可用 `--ai-analysis-config`
-或 `ai.json` 的 `analysis_config` 指定。分析访问数沿用 `--ai-visits`（默认 300），
+或 `ai.json` 的 `analysis_config` 指定。分析深度由 `--analysis-visits` 控制，
+默认 **1000**（比对弈的 300 更深）；设为 **0** 表示持续分析，直到走子或关闭分析。
 网页每 250ms 拉取一次最新快照。
+
+```bash
+python3 main.py web --analysis-visits 2000   # 更深
+python3 main.py web --analysis-visits 0      # 持续分析
+```
 
 ### 强度与规则
 

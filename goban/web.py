@@ -451,7 +451,10 @@ function renderAnalysis() {
     list.innerHTML = '';
     return;
   }
-  hint.textContent = '胜率为黑方视角；正目差表示黑领先';
+  const visitsText = analysis && typeof analysis.visits === 'number'
+    ? (analysis.visits === 0 ? '；持续分析' : '；' + analysis.visits + ' visits')
+    : '';
+  hint.textContent = '胜率为黑方视角' + visitsText + '；正目差表示黑领先';
   if (!analysis || analysis.error) {
     hint.textContent = (analysis && analysis.error) || '分析中…';
     summary.textContent = '';
@@ -467,8 +470,10 @@ function renderAnalysis() {
   const a = analysis.analysis;
   const winrate = (a.root_winrate * 100).toFixed(1);
   const score = (a.root_score_lead >= 0 ? '+' : '') + a.root_score_lead.toFixed(1);
-  summary.innerHTML = '黑胜率 <b>' + winrate + '%</b> · 目差 <b>' + score + '</b>' +
-    (a.during_search ? ' · 搜索中' : '');
+  const searching = a.during_search
+    ? (analysis.visits === 0 ? ' · 持续分析' : ' · 搜索中')
+    : '';
+  summary.innerHTML = '黑胜率 <b>' + winrate + '%</b> · 目差 <b>' + score + '</b>' + searching;
   bar.style.width = (a.root_winrate * 100).toFixed(1) + '%';
   const moves = (a.moves || []).slice().sort((x, y) => x.order - y.order).slice(0, 6);
   list.innerHTML = moves.map((m, i) => {

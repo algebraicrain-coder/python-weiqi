@@ -221,8 +221,12 @@ class KataGoAnalysis:
         }
         if not moves:
             query["initialPlayer"] = "B" if position.to_play == BLACK else "W"
-        if self.config.max_visits > 0:
-            query["maxVisits"] = int(self.config.max_visits)
+        visits = int(self.config.analysis_visits)
+        if visits > 0:
+            query["maxVisits"] = visits
+        else:
+            # 0 表示持续分析：给一个实际上到不了的上限，靠走子/关闭来取消。
+            query["maxVisits"] = 1_000_000_000
         return query
 
     def _is_black_perspective(self, to_play: int) -> bool:
@@ -465,6 +469,11 @@ class AnalysisService:
                 "analysis": self._latest.to_dict() if self._latest is not None else None,
                 "current_key": current_key,
                 "error": self._error,
+                "visits": getattr(
+                    getattr(self.analyzer, "config", None),
+                    "analysis_visits",
+                    0,
+                ),
             }
 
     def close(self) -> None:

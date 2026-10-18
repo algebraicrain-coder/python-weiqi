@@ -147,6 +147,28 @@ class ParseTest(unittest.TestCase):
         analysis = analyzer._parse(response, position)
         self.assertEqual(analysis.moves, ())
 
+    def test_analysis_visits_and_continuous_mode(self):
+        position = Position(9, 7.5, "chinese", (), BLACK, (0,) * 81)
+        config = AIConfig(
+            binary="/bin/true",
+            model=__file__,
+            analysis_config=__file__,
+            analysis_visits=1500,
+        )
+        analyzer = KataGoAnalysis(config, winrates_as="BLACK")
+        self.assertEqual(analyzer._build_query(position, "x")["maxVisits"], 1500)
+        config = AIConfig(
+            binary="/bin/true",
+            model=__file__,
+            analysis_config=__file__,
+            analysis_visits=0,
+        )
+        analyzer = KataGoAnalysis(config, winrates_as="BLACK")
+        self.assertEqual(
+            analyzer._build_query(position, "x")["maxVisits"],
+            1_000_000_000,
+        )
+
 
 class ServiceTest(unittest.TestCase):
     def setUp(self):

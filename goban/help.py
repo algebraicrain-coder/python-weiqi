@@ -406,11 +406,23 @@ ENTRIES: list[Entry] = [
     ),
     Entry(
         "--ai-visits",
-        "命令行：限制 AI 每手访问数",
+        "命令行：限制 AI 对弈每手访问数",
         "cli",
         aliases=("ai-visits",),
         detail="访问数越低越弱、越快；不指定时使用 ai.json 或默认值 300。",
         examples=("python3 main.py --ai --ai-visits 100",),
+    ),
+    Entry(
+        "--analysis-visits",
+        "命令行：实时分析访问数",
+        "cli",
+        aliases=("analysis-visits",),
+        detail=(
+            "默认 1000，比对弈的 300 更深；设为 0 表示持续分析，直到走子或关闭分析。"
+            "中间结果仍会每 0.2 秒更新一次。"
+        ),
+        examples=("python3 main.py web --analysis-visits 2000", "python3 main.py web --analysis-visits 0"),
+        see_also=("analysis",),
     ),
     Entry(
         "--ai-analysis-config",
@@ -507,8 +519,9 @@ ENTRIES: list[Entry] = [
         detail=(
             "AI 是可选外部引擎，不影响核心零依赖。macOS 可 brew install katago；"
             "Linux/Windows 下载官方可执行文件与 .bin.gz 模型。命令行用 --ai，"
-            "网页检测到引擎后出现「AI 落子」按钮。默认 AI 执白，可用 --ai-color 切换；"
-            "--ai-visits / --ai-time 控制强度。路径可用 ai.json 或 --ai-bin/--ai-model 固定。"
+            "网页检测到引擎后出现「AI 落子」和「AI 分析」。默认 AI 执白，可用 --ai-color 切换；"
+            "--ai-visits / --ai-time 控制对弈强度，--analysis-visits 控制实时分析深度。"
+            "路径可用 ai.json 或 --ai-bin/--ai-model 固定。"
         ),
         examples=("python3 main.py --ai", "python3 main.py --ai --ai-visits 100"),
         see_also=("--ai", "--ai-color", "--ai-visits", "analysis"),
@@ -521,10 +534,11 @@ ENTRIES: list[Entry] = [
         detail=(
             "网页「AI 分析」开关会启动独立的 katago analysis 进程，流式返回当前局面的"
             "胜率、目差、前几个候选点和 ownership 领地预测；每走一手自动切换到新局面。"
+            "默认分析 1000 visits，可用 --analysis-visits 调整；0 表示持续分析。"
             "需要 analysis_example.cfg，可用 --ai-analysis-config 或 ai.json 指定。"
         ),
         examples=("python3 main.py web",),
-        see_also=("ai", "--ai-analysis-config"),
+        see_also=("ai", "--ai-analysis-config", "--analysis-visits"),
     ),
     Entry(
         "scoring",

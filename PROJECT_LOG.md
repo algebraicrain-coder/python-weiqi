@@ -316,6 +316,11 @@ python3 -m unittest discover -s tests -v
     新增 8 个测试（`test_analysis.py`），总计 130 个；测试全部用 fake analyzer。
     修复 `Analysis.key`（SHA1）与网页 `current_key`（原为 tuple）类型不一致的问题，
     避免旧分析结果画到新棋盘。实测 19 路空盘约 2 秒出中间结果、5 秒左右完成 300 visits。
+22. **分析访问数调大（用户反馈）**：原先实时分析沿用对弈的 300 visits，偏浅；现拆成
+    `AIConfig.analysis_visits`，默认 **1000**，可用 `--analysis-visits`、
+    `KATAGO_ANALYSIS_VISITS` 或 `ai.json` 调整。设为 **0** 时给 KataGo 一个实际到不了的
+    上限，表示**持续分析**，直到走子/关闭分析；面板会显示「持续分析」。对弈仍由
+    `--ai-visits`（默认 300）独立控制。新增 1 个查询构造测试，总计 131 个。
 
 ## 计分规则（用户提问澄清）
 
