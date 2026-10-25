@@ -136,9 +136,13 @@ PAGE = r"""<!doctype html>
     margin: 12px 2px 0; font-size: 12px; letter-spacing: .06em;
     color: var(--muted); text-align: center;
   }
-  .message { min-height: 18px; margin: 10px 0 0; font-size: 13px; text-align: center; color: var(--danger); }
+  .message { min-height: 18px; margin: 10px 0 0; font-size: 13px; text-align: center; color: var(--accent); }
   .message:not(:empty) {
-    background: #fff2ef; border: 1px solid #f1c7c0; border-radius: 10px; padding: 8px 12px;
+    background: #eef7f2; border: 1px solid #cfe3d8; border-radius: 10px; padding: 8px 12px;
+  }
+  .message.error { color: var(--danger); }
+  .message.error:not(:empty) {
+    background: #fff2ef; border-color: #f1c7c0;
   }
   .panel { display: flex; flex-direction: column; gap: 14px; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -198,9 +202,15 @@ PAGE = r"""<!doctype html>
   }
   .analysis-row:last-child { border-bottom: 0; }
   .analysis-row .rank { width: 18px; color: var(--muted); }
-  .analysis-row .mv { width: 42px; font-weight: 600; }
-  .analysis-row .wr { width: 58px; text-align: right; }
-  .analysis-row .sc { width: 52px; text-align: right; color: var(--muted); }
+  .analysis-row .mv { width: 38px; font-weight: 600; }
+  .analysis-row .wr { width: 54px; text-align: right; }
+  .analysis-row .sc { width: 46px; text-align: right; color: var(--muted); }
+  .analysis-row .visits { width: 34px; text-align: right; color: var(--muted); }
+  .analysis-row.head {
+    color: var(--muted); font-size: 10.5px; font-weight: 400;
+    border-bottom: 1px solid var(--line); padding-bottom: 5px;
+  }
+  .analysis-row.head .mv, .analysis-row.head .wr { font-weight: 400; color: var(--muted); }
   .analysis-row.best .mv, .analysis-row.best .wr { color: var(--accent); }
   .analysis-head { font-size: 12px; line-height: 1.6; margin-bottom: 4px; }
   .analysis-head b { color: var(--accent); }
@@ -454,7 +464,8 @@ function renderAnalysis() {
   const visitsText = analysis && typeof analysis.visits === 'number'
     ? (analysis.visits === 0 ? '；持续分析' : '；' + analysis.visits + ' visits')
     : '';
-  hint.textContent = '胜率为黑方视角' + visitsText + '；正目差表示黑领先';
+  hint.textContent = '胜率为黑方视角' + visitsText +
+    '；棋盘色块为领地预测；正目差表示黑领先';
   if (!analysis || analysis.error) {
     hint.textContent = (analysis && analysis.error) || '分析中…';
     summary.textContent = '';
@@ -475,18 +486,32 @@ function renderAnalysis() {
     : '';
   summary.innerHTML = '黑胜率 <b>' + winrate + '%</b> · 目差 <b>' + score + '</b>' + searching;
   bar.style.width = (a.root_winrate * 100).toFixed(1) + '%';
-  const moves = (a.moves || []).slice().sort((x, y) => x.order - y.order).slice(0, 6);
-  list.innerHTML = moves.map((m, i) => {
+  const allMoves = (a.moves || []).slice().sort((x, y) => x.order - y.order);
+  const maxVisits = Math.max(1, ...allMoves.map(m => Number(m.visits || 0)));
+  const visitThreshold = Math.max(5, maxVisits * 0.01);
+  const filtered = allMoves.filter(
+    m => m.order === 0 || Number(m.visits || 0) >= visitThreshold
+  );
+  const moves = (filtered.length ? filtered : allMoves).slice(0, 6);
+  const rows = moves.map((m, i) => {
     const vertex = m.vertex === 'pass' ? 'pass' : m.vertex;
     const wr = (m.winrate * 100).toFixed(1) + '%';
     const sc = (m.score_lead >= 0 ? '+' : '') + m.score_lead.toFixed(1);
+    const visits = Number(m.visits || 0);
+    const visitLabel = visits >= 1000 ? (visits / 1000).toFixed(1) + 'k' : String(visits);
     return '<div class="analysis-row' + (i === 0 ? ' best' : '') + '">' +
       '<span class="rank">' + (i + 1) + '</span>' +
       '<span class="mv">' + vertex + '</span>' +
       '<span class="wr">' + wr + '</span>' +
       '<span class="sc">' + sc + '</span>' +
+      '<span class="visits">' + visitLabel + '</span>' +
       '</div>';
   }).join('');
+  list.innerHTML =
+    '<div class="analysis-row head">' +
+    '<span class="rank">#</span><span class="mv">点</span>' +
+    '<span class="wr">黑胜率</span><span class="sc">目差</span>' +
+    '<span class="visits">访问</span></div>' + rows;
 }
 
 function hoshiPoints(size) {
@@ -677,18 +702,27 @@ function drawOwnership() {
   if (!analysisEnabled || !analysis || !analysis.analysis || !state) return;
   const a = analysis.analysis;
   if (!a.ownership || a.key !== (state.position_key || analysis.current_key)) return;
+  const stones = state.grid ? state.grid.filter(c => c !== 0).length : 0;
+  if (stones < 4) return; // 空盘/开局前几手不铺领地，避免看起来像木纹污点
   const g = geom();
   if (a.ownership.length < g.size * g.size) return;
-  const half = g.cell * 0.22;
+  const half = g.cell * 0.17;
+  const radius = g.cell * 0.08;
   ctx.save();
   for (let row = 0; row < g.size; row++) {
     for (let col = 0; col < g.size; col++) {
       const value = a.ownership[row * g.size + col];
-      if (Math.abs(value) < 0.15) continue;
+      if (Math.abs(value) < 0.35) continue;
       const point = toScreen(col, g.size - 1 - row, g);
-      ctx.globalAlpha = Math.min(0.32, Math.abs(value) * 0.38);
+      ctx.globalAlpha = Math.min(0.18, Math.abs(value) * 0.22);
       ctx.fillStyle = value > 0 ? '#0b0b0b' : '#fffdf8';
-      ctx.fillRect(point.cx - half, point.cy - half, half * 2, half * 2);
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(point.cx - half, point.cy - half, half * 2, half * 2, radius);
+        ctx.fill();
+      } else {
+        ctx.fillRect(point.cx - half, point.cy - half, half * 2, half * 2);
+      }
     }
   }
   ctx.restore();
@@ -716,14 +750,21 @@ function statusText() {
   } else {
     s += (state.to_play === 1 ? '黑方' : '白方') + ' 行棋\n';
   }
-  s += `提子 黑 ${state.captures['1']}  白 ${state.captures['2']}  贴目 ${state.komi}  劫 ${state.ko}`;
+  const ko = { chinese: '中国', simple: '简单劫', situational: '情境劫', japanese: '日本' }[state.ko] || state.ko;
+  s += `提子 黑 ${state.captures['1']}  白 ${state.captures['2']}  贴目 ${state.komi}  劫 ${ko}`;
   return s;
 }
 
 function render() {
   draw();
   document.getElementById('status').textContent = statusText();
-  document.getElementById('msg').textContent = state.message || '';
+  const msg = state.message || '';
+  const msgEl = document.getElementById('msg');
+  msgEl.textContent = msg;
+  msgEl.classList.toggle(
+    'error',
+    /illegal|error|错误|非法|失败|超时|不可用|找不到|不存在|无法|已退出|unsupported|already over|no move/i.test(msg)
+  );
   document.getElementById('records-dir').textContent = '棋谱目录：' + (state.records_dir || '');
   const counting = state.over && !state.no_result && !state.resigned_by;
   document.getElementById('b-dead').style.display = counting ? '' : 'none';
