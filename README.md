@@ -49,17 +49,19 @@ python-weiqi/
 │       ├── config.py      ai.json / 环境变量 / Homebrew 自动发现
 │       ├── katago.py      KataGo 子进程、GTP 协议、超时与重连
 │       └── analysis.py    实时分析：JSON 流、胜率/目差/候选点/领地
-└── tests/
-    ├── test_board.py      内核单元测试（14 个用例）
-    ├── test_sgf.py        SGF/棋谱与保存格式单元测试（32 个用例）
-    ├── test_counting.py   死子标记与数子测试（8 个用例）
-    ├── test_settings.py   设置模式测试（11 个用例）
-    ├── test_ko.py         劫规则测试（11 个用例）
-    ├── test_help.py       帮助系统测试（14 个用例）
-    ├── test_web.py        图形界面 API 与页面测试（12 个用例）
-    ├── test_ai.py         AI 配置与 GTP 协议测试（11 个用例）
-    ├── test_web_ai.py     网页 AI 接口测试（9 个用例）
-    └── test_analysis.py   实时分析解析/服务/HTTP 测试（9 个用例）
+├── tests/
+│   ├── test_board.py      内核单元测试（14 个用例）
+│   ├── test_sgf.py        SGF/棋谱与保存格式单元测试（32 个用例）
+│   ├── test_counting.py   死子标记与数子测试（8 个用例）
+│   ├── test_settings.py   设置模式测试（11 个用例）
+│   ├── test_ko.py         劫规则测试（11 个用例）
+│   ├── test_help.py       帮助系统测试（14 个用例）
+│   ├── test_web.py        图形界面 API 与页面测试（12 个用例）
+│   ├── test_ai.py         AI 配置与 GTP 协议测试（11 个用例）
+│   ├── test_web_ai.py     网页 AI 接口测试（9 个用例）
+│   └── test_analysis.py   实时分析解析/服务/HTTP 测试（9 个用例）
+└── scripts/
+    └── run_web.command    macOS 双击启动网页版
 ```
 
 ## 快速开始
@@ -105,6 +107,9 @@ python3 main.py --load game.sgf
 python3 main.py web                # 默认 127.0.0.1:8080 并自动打开浏览器
 python3 main.py web --port 9000 --no-open
 
+# macOS 双击启动（见下文）
+# 打开 ~/Applications/围棋（网页版）.command
+
 # 可选 AI（需先安装 KataGo，见下文）
 python3 main.py --ai                       # AI 执白
 python3 main.py --ai --ai-color black      # AI 执黑
@@ -137,6 +142,25 @@ python3 main.py web
 ```bash
 python3 -m goban --size 9
 ```
+
+### macOS 双击启动（网页版）
+
+打开 Finder 里的：
+
+```text
+~/Applications/围棋（网页版）.command
+```
+
+双击即可启动本地服务并打开浏览器（默认 `http://127.0.0.1:8080/`）。
+它只是调用仓库里的 [`scripts/run_web.command`](scripts/run_web.command)：
+
+- 默认端口 **8080**；可用 `WEIQI_WEB_PORT=8090` 换端口；
+- `WEIQI_NO_OPEN=1` 只启动服务、不自动开浏览器；
+- 端口被占用时会提示，不会误开别的服务；
+- 按 `Ctrl+C` 或关闭终端窗口会停止服务并释放端口。
+
+如果仓库移动了位置，改一下 `~/Applications/围棋（网页版）.command` 里的
+`TARGET` 路径即可。
 
 ## 可选 AI：KataGo
 

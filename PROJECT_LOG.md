@@ -321,6 +321,12 @@ python3 -m unittest discover -s tests -v
     `KATAGO_ANALYSIS_VISITS` 或 `ai.json` 调整。设为 **0** 时给 KataGo 一个实际到不了的
     上限，表示**持续分析**，直到走子/关闭分析；面板会显示「持续分析」。对弈仍由
     `--ai-visits`（默认 300）独立控制。新增 1 个查询构造测试，总计 131 个。
+23. **网页版 .command 启动器（用户需求）**：仿照《格式塔》网页版，新增
+    `scripts/run_web.command`：相对仓库定位、端口占用检查、服务就绪探测、
+    优先用 Chrome 打开、Ctrl+C/关窗时清理子进程；并在
+    `~/Applications/围棋（网页版）.command` 放一个指向它的双击启动器。
+    默认 8080，支持 `WEIQI_WEB_PORT` 与 `WEIQI_NO_OPEN`。实测启动返回 200，
+    退出后端口正常释放。
 
 ## 计分规则（用户提问澄清）
 
